@@ -14,8 +14,21 @@ class Booking extends Model
         'no_telepon',
         'jumlah_tiket',
         'total_harga',
-        'status'
+        'status',
+        'payment_status',
+        'payment_notified_at',
+        'payment_proof_path',
     ];
+
+    public function paymentProofs()
+    {
+        return $this->hasMany(PaymentProof::class);
+    }
+
+    public function latestPaymentProof()
+    {
+        return $this->hasOne(PaymentProof::class)->latestOfMany();
+    }
 
     public function user()
     {

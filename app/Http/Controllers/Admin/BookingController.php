@@ -10,7 +10,7 @@ class BookingController extends Controller
 {
     public function index()
     {
-        $bookings = Booking::with(['user', 'schedule.bus', 'schedule.route'])
+        $bookings = Booking::with(['user', 'schedule.bus', 'schedule.route', 'latestPaymentProof'])
             ->latest()
             ->get();
 
@@ -24,7 +24,11 @@ class BookingController extends Controller
         ]);
 
         $oldStatus = $booking->status;
-        $booking->update(['status' => $request->status]);
+        $update = ['status' => $request->status];
+        if ($request->status === 'confirmed') {
+            $update['payment_status'] = 'paid';
+        }
+        $booking->update($update);
 
         if ($request->status === 'cancelled' && $oldStatus !== 'cancelled') {
             $booking->schedule->increment('kursi_tersedia', $booking->jumlah_tiket);

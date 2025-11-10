@@ -1,74 +1,123 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4">
-    <h1 class="text-3xl font-bold mb-6">Kelola Booking</h1>
+<div class="container">
+    <h1 class="h3 fw-bold mb-4">Kelola Booking</h1>
 
-    <div class="bg-white rounded-lg shadow overflow-x-auto">
-        <table class="min-w-full">
-            <thead class="bg-gray-50">
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Penumpang</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rute</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tiket</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                    <th>Kode</th>
+                    <th>Penumpang</th>
+                    <th>Rute</th>
+                    <th>Tanggal</th>
+                    <th>Tiket</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Pembayaran</th>
+                    <th>Aksi</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody>
                 @forelse($bookings as $booking)
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">{{ $booking->kode_booking }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900">{{ $booking->nama_penumpang }}</div>
-                            <div class="text-sm text-gray-500">{{ $booking->no_telepon }}</div>
+                        <td>{{ $booking->kode_booking }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ $booking->nama_penumpang }}</div>
+                            <div class="text-muted small">{{ $booking->no_telepon }}</div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <td>
                             {{ $booking->schedule->route->kota_asal }} → {{ $booking->schedule->route->kota_tujuan }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <td>
                             {{ \Carbon\Carbon::parse($booking->schedule->tanggal_berangkat)->format('d M Y') }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">{{ $booking->jumlah_tiket }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">Rp {{ number_format($booking->total_harga, 0, ',', '.') }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                                @if($booking->status == 'confirmed') bg-green-100 text-green-800
-                                @elseif($booking->status == 'cancelled') bg-red-100 text-red-800
-                                @else bg-yellow-100 text-yellow-800
-                                @endif">
-                                {{ $booking->status }}
-                            </span>
+                        <td>{{ $booking->jumlah_tiket }}</td>
+                        <td>Rp {{ number_format($booking->total_harga, 0, ',', '.') }}</td>
+                        <td>
+                            @if($booking->status == 'confirmed')
+                                <span class="badge text-bg-success">confirmed</span>
+                            @elseif($booking->status == 'cancelled')
+                                <span class="badge text-bg-danger">cancelled</span>
+                            @else
+                                <span class="badge text-bg-warning">pending</span>
+                            @endif
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        @php
+                            $latestProof = $booking->latestPaymentProof;
+                            $latestProofPath = $latestProof->path ?? $booking->payment_proof_path;
+                        @endphp
+                        <td style="min-width: 160px;">
+                            @if($booking->payment_status === 'paid')
+                                <span class="badge text-bg-success">paid</span>
+                            @elseif($booking->payment_status === 'pending_verification')
+                                <span class="badge text-bg-info">menunggu verifikasi</span>
+                            @else
+                                <span class="badge text-bg-secondary">unpaid</span>
+                            @endif
+                            @if($latestProofPath)
+                                <div class="mt-1">
+                                    <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#paymentProofModal{{ $booking->id }}">Lihat bukti</button>
+                                </div>
+                            @endif
+                        </td>
+                        <td>
                             @if($booking->status == 'pending')
                                 <form method="POST" action="{{ route('admin.bookings.updateStatus', $booking) }}" class="inline">
                                     @csrf
                                     @method('PATCH')
                                     <input type="hidden" name="status" value="confirmed">
-                                    <button type="submit" class="text-green-600 hover:text-green-900 mr-2">Konfirmasi</button>
+                                    <button type="submit" class="btn btn-sm btn-success me-1">Konfirmasi</button>
                                 </form>
                                 <form method="POST" action="{{ route('admin.bookings.updateStatus', $booking) }}" class="inline">
                                     @csrf
                                     @method('PATCH')
                                     <input type="hidden" name="status" value="cancelled">
-                                    <button type="submit" class="text-red-600 hover:text-red-900">Batalkan</button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Batalkan</button>
                                 </form>
                             @else
-                                -
+                                <span class="text-muted">-</span>
                             @endif
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-6 py-4 text-center text-gray-500">Tidak ada booking</td>
+                        <td colspan="9" class="text-center text-muted">Tidak ada booking</td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 @endsection
+
+@push('modals')
+    @foreach($bookings as $booking)
+        @php
+            $latestProof = $booking->latestPaymentProof;
+            $latestProofPath = $latestProof->path ?? $booking->payment_proof_path;
+            $proofUrl = $latestProof ? route('payment-proofs.show', $latestProof) : ($latestProofPath ? asset('storage/' . $latestProofPath) : null);
+        @endphp
+        @if($proofUrl)
+            <div class="modal fade" id="paymentProofModal{{ $booking->id }}" tabindex="-1" aria-labelledby="paymentProofModalLabel{{ $booking->id }}" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="paymentProofModalLabel{{ $booking->id }}">Bukti Pembayaran - {{ $booking->kode_booking }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body text-center">
+                            <img src="{{ $proofUrl }}" alt="Bukti Pembayaran" class="img-fluid rounded">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endforeach
+@endpush

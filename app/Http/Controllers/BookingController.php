@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Schedule;
+use App\Models\PaymentSetting;
+use App\Models\PaymentProof;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class BookingController extends Controller
@@ -18,8 +21,6 @@ class BookingController extends Controller
     {
         $request->validate([
             'schedule_id' => 'required|exists:schedules,id',
-            'nama_penumpang' => 'required|string|max:255',
-            'no_telepon' => 'required|string|max:20',
             'jumlah_tiket' => 'required|integer|min:1',
         ]);
 
@@ -30,13 +31,17 @@ class BookingController extends Controller
         }
 
         $totalHarga = $schedule->route->harga * $request->jumlah_tiket;
+        $user = auth()->user();
+        if (!$user->phone) {
+            return back()->with('error', 'Lengkapi nomor telepon di profil Anda sebelum memesan.');
+        }
 
         $booking = Booking::create([
             'kode_booking' => 'BK' . strtoupper(Str::random(8)),
-            'user_id' => auth()->id(),
+            'user_id' => $user->id,
             'schedule_id' => $request->schedule_id,
-            'nama_penumpang' => $request->nama_penumpang,
-            'no_telepon' => $request->no_telepon,
+            'nama_penumpang' => $user->name,
+            'no_telepon' => $user->phone,
             'jumlah_tiket' => $request->jumlah_tiket,
             'total_harga' => $totalHarga,
             'status' => 'pending',
@@ -50,7 +55,47 @@ class BookingController extends Controller
     public function show(Booking $booking)
     {
         $this->authorize('view', $booking);
-        return view('bookings.show', compact('booking'));
+        $booking->loadMissing('latestPaymentProof');
+        $paymentSetting = PaymentSetting::first();
+        return view('bookings.show', compact('booking', 'paymentSetting'));
+    }
+
+    public function notifyPayment(Request $request, Booking $booking)
+    {
+        $this->authorize('view', $booking);
+        if ($booking->status !== 'pending') {
+            return back()->with('error', 'Booking tidak dapat dikonfirmasi pembayaran pada status saat ini.');
+        }
+        $booking->loadMissing('latestPaymentProof');
+        if (!$booking->latestPaymentProof) {
+            return back()->with('error', 'Unggah bukti pembayaran terlebih dahulu sebelum konfirmasi.');
+        }
+        $booking->update([
+            'payment_status' => 'pending_verification',
+            'payment_notified_at' => now(),
+        ]);
+        return back()->with('success', 'Konfirmasi pembayaran terkirim. Mohon tunggu verifikasi admin.');
+    }
+
+    public function uploadPaymentProof(Request $request, Booking $booking)
+    {
+        $this->authorize('view', $booking);
+        if ($booking->status !== 'pending') {
+            return back()->with('error', 'Tidak dapat mengunggah bukti pembayaran untuk booking ini.');
+        }
+        $request->validate([
+            'payment_proof' => 'required|image|max:4096', // max 4MB
+        ]);
+        $file = $request->file('payment_proof');
+        $path = $file->store('payment_proofs', 'public');
+        $booking->paymentProofs()->create([
+            'path' => $path,
+        ]);
+        $booking->update([
+            'payment_proof_path' => $path,
+            'payment_status' => 'unpaid',
+        ]);
+        return back()->with('success', 'Bukti pembayaran berhasil diunggah. Silakan klik konfirmasi pembayaran.');
     }
 
     public function myBookings()
